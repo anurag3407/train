@@ -5,7 +5,9 @@ import type { Hotspot, Severity } from "@/lib/types";
 import { severityHex } from "@/lib/ui";
 
 const MAPPLS_KEY = process.env.NEXT_PUBLIC_MAPPLS_KEY || "";
-const BENGALURU: [number, number] = [12.9716, 77.5946];
+const BENGALURU_LAT = 12.9716;
+const BENGALURU_LON = 77.5946;
+const BENGALURU: [number, number] = [BENGALURU_LAT, BENGALURU_LON];
 const MAPPLS_TIMEOUT_MS = 8000;
 
 declare global {
@@ -182,11 +184,32 @@ export default function MapPanel(props: MapPanelProps) {
           containerEl.offsetHeight;
 
           const map = new window.mappls.Map(containerEl.id, {
-            center: BENGALURU,
+            center: { lat: BENGALURU_LAT, lng: BENGALURU_LON },
             zoom: 11,
             zoomControl: true,
             location: false,
           });
+          // Force re-center after init in case SDK ignored center option
+          // (some Mappls SDK versions need an explicit setCenter call).
+          const recenterBengaluru = () => {
+            try {
+              if (typeof map.setCenter === "function") {
+                map.setCenter({ lat: BENGALURU_LAT, lng: BENGALURU_LON });
+              } else if (typeof map.flyTo === "function") {
+                map.flyTo({ center: [BENGALURU_LON, BENGALURU_LAT], zoom: 11 });
+              } else if (typeof map.setView === "function") {
+                map.setView([BENGALURU_LAT, BENGALURU_LON], 11);
+              }
+              if (typeof map.setZoom === "function") map.setZoom(11);
+            } catch {}
+          };
+          // Run recenter on next tick AND once SDK is fully ready.
+          requestAnimationFrame(recenterBengaluru);
+          setTimeout(recenterBengaluru, 250);
+          if (typeof map.on === "function") {
+            try { map.on("load", recenterBengaluru); } catch {}
+            try { map.on("ready", recenterBengaluru); } catch {}
+          }
           // Some SDK versions return a wrapper; wait for ready.
           if (typeof map.on === "function") {
             map.on("click", (e: any) => {
@@ -302,7 +325,13 @@ export default function MapPanel(props: MapPanelProps) {
         draggable: false,
       });
       selectedMarkerRef.current = m;
-      map.setCenter([selected.lat, selected.lon]);
+      try {
+        if (typeof map.setCenter === "function") {
+          map.setCenter({ lat: selected.lat, lng: selected.lon });
+        } else if (typeof map.flyTo === "function") {
+          map.flyTo({ center: [selected.lon, selected.lat] });
+        }
+      } catch {}
     }
   }, [selected, mode]);
 

@@ -109,6 +109,31 @@ html.lenis, html.lenis body { height: auto; }
   border-color: theme('colors.ink.600') !important;
 }
 
+/* Mappls SDK injects child canvases / divs that need to fill the host */
+.mappls-map,
+.mappls-map-container,
+.mappls-map-canvas,
+.mappls-vector-map,
+.mapboxgl-map,
+.maplibregl-map {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  inset: 0 !important;
+}
+.mappls-map > div,
+.mapboxgl-map > div,
+.maplibregl-map > div {
+  width: 100% !important;
+  height: 100% !important;
+}
+.mappls-map canvas,
+.mapboxgl-canvas,
+.maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 /* Marquee tracks */
 .marquee {
   mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);

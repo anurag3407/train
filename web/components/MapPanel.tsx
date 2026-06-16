@@ -176,7 +176,12 @@ export default function MapPanel(props: MapPanelProps) {
           if (!containerRef.current.id) {
             containerRef.current.id = "mappls-map-" + Math.random().toString(36).slice(2, 8);
           }
-          const map = new window.mappls.Map(containerRef.current.id, {
+          // Mappls measures container size at construction. Force layout commit first.
+          const containerEl = containerRef.current;
+          // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+          containerEl.offsetHeight;
+
+          const map = new window.mappls.Map(containerEl.id, {
             center: BENGALURU,
             zoom: 11,
             zoomControl: true,
@@ -192,6 +197,31 @@ export default function MapPanel(props: MapPanelProps) {
           }
           mapRef.current = map;
           setMode("mappls");
+
+          // Mappls Map computes size once at init — if container animated in,
+          // we now force a resize. Repeat across a few RAF ticks to cover
+          // animation-driven layout shifts.
+          const forceResize = () => {
+            try {
+              if (typeof map.resize === "function") map.resize();
+              else if (typeof map.invalidateSize === "function") map.invalidateSize();
+              else if (map._map?.resize) map._map.resize();
+            } catch {}
+          };
+          requestAnimationFrame(forceResize);
+          setTimeout(forceResize, 150);
+          setTimeout(forceResize, 500);
+          setTimeout(forceResize, 1200);
+
+          // Resize observer keeps it correct on window resize / layout changes.
+          if (typeof ResizeObserver !== "undefined") {
+            const ro = new ResizeObserver(() => forceResize());
+            ro.observe(containerEl);
+            (mapRef.current as any).__ro = ro;
+          }
+          window.addEventListener("resize", forceResize);
+          (mapRef.current as any).__resizeHandler = forceResize;
+
           return;
         } catch (err: any) {
           console.warn("Mappls SDK failed, falling back to OSM:", err);
@@ -212,8 +242,17 @@ export default function MapPanel(props: MapPanelProps) {
 
     return () => {
       cancelled = true;
-      if (mapRef.current && mapRef.current.remove) {
-        try { mapRef.current.remove(); } catch {}
+      const m = mapRef.current as any;
+      if (m) {
+        try { m.__ro?.disconnect?.(); } catch {}
+        try {
+          if (m.__resizeHandler) {
+            window.removeEventListener("resize", m.__resizeHandler);
+          }
+        } catch {}
+        if (m.remove) {
+          try { m.remove(); } catch {}
+        }
       }
       mapRef.current = null;
     };
@@ -341,7 +380,11 @@ export default function MapPanel(props: MapPanelProps) {
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-2xl border border-ink-700">
-      <div ref={containerRef} className="absolute inset-0 z-0" />
+      <div
+        ref={containerRef}
+        className="absolute inset-0 z-0"
+        style={{ width: "100%", height: "100%", position: "absolute" }}
+      />
 
       {/* Floating badges */}
       <div className="pointer-events-none absolute left-4 top-4 z-10 flex flex-col gap-2">
